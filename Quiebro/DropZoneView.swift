@@ -11,7 +11,7 @@ struct DropZoneView: View {
                     .font(.system(size: 50))
                     .foregroundColor(.secondary)
                 
-                Text("Click or drop image here")
+                Text("Click or drop split files here")
                     .font(.title3)
                     .foregroundColor(.secondary)
             }
