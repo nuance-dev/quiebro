@@ -25,26 +25,23 @@ struct ContentView: View {
                                 mode = tabMode
                             }
                         }) {
-                            VStack(spacing: 4) {
-                                Text(tabMode == .breakFile ? "Break" : "Mend")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(mode == tabMode ? 
-                                        Color(NSColor.controlAccentColor) : 
-                                        Color.secondary)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 8)
-                            }
+                            Text(tabMode == .breakFile ? "Break" : "Mend")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(mode == tabMode ? 
+                                    Color(NSColor.controlAccentColor) : 
+                                    Color.secondary)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 36)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(mode == tabMode ? 
+                                            Color(NSColor.controlAccentColor).opacity(0.1) : 
+                                            Color.clear)
+                                )
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(PlainButtonStyle())
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(mode == tabMode ? 
-                                    Color(NSColor.controlAccentColor).opacity(0.1) : 
-                                    Color.clear)
-                                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: mode)
-                        )
                         .frame(width: 120)
-                        .contentShape(Rectangle())
                     }
                 }
                 .background(
