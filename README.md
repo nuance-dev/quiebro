@@ -4,6 +4,8 @@ A sleek, free native macOS app that splits files into three encrypted pieces and
 
 Note: This app requires macOS version 14+
 
+![quiebro-banner](https://github.com/user-attachments/assets/117759b7-ebd0-4b04-b8bf-482169ea55ff)
+
 ## Features
 
 - **Split Files**: Break any file into 3 encrypted pieces
@@ -11,6 +13,10 @@ Note: This app requires macOS version 14+
 - **Multiple Input Methods**: Drag & drop, paste (⌘V), or click to upload
 - **Native Performance**: Built with SwiftUI for optimal processing
 - **Dark and Light modes**: Automatically matches your system theme
+
+
+https://github.com/user-attachments/assets/ea628ef4-4e09-498a-ad5c-2a093028c669
+
 
 ## 💻 Get it
 
