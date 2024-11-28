@@ -16,22 +16,47 @@ struct ContentView: View {
             VisualEffectBlur(material: .headerView, blendingMode: .behindWindow)
                 .ignoresSafeArea()
             
-            VStack(spacing: 20) {
-                Picker("Mode", selection: $mode) {
-                    Text("Break").tag(Mode.breakFile)
-                    Text("Mend").tag(Mode.mend)
+            VStack(spacing: 24) {
+                // Modern Tab Switcher
+                HStack(spacing: 0) {
+                    ForEach([Mode.breakFile, Mode.mend], id: \.self) { tabMode in
+                        Button(action: { 
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                mode = tabMode
+                            }
+                        }) {
+                            VStack(spacing: 4) {
+                                Text(tabMode == .breakFile ? "Break" : "Mend")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(mode == tabMode ? 
+                                        Color(NSColor.controlAccentColor) : 
+                                        Color.secondary)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                            }
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(mode == tabMode ? 
+                                    Color(NSColor.controlAccentColor).opacity(0.1) : 
+                                    Color.clear)
+                                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: mode)
+                        )
+                        .frame(width: 120)
+                        .contentShape(Rectangle())
+                    }
                 }
-                .pickerStyle(SegmentedPickerStyle())
-                .padding(.horizontal)
                 .background(
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: 12)
                         .fill(Color(NSColor.windowBackgroundColor).opacity(0.5))
-                        .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+                        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
                 )
+                .padding(.horizontal)
                 
                 ZStack {
                     if mode == .breakFile {
@@ -40,14 +65,62 @@ struct ContentView: View {
                                 handleFileSelection()
                             }
                         } else {
-                            VStack {
-                                Text("File broken into pieces:")
-                                    .font(.headline)
+                            // Improved file list view
+                            VStack(spacing: 16) {
+                                HStack {
+                                    Text("File Pieces")
+                                        .font(.headline)
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Text("\(manager.pieces.count)/3")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.secondary.opacity(0.1))
+                                        .cornerRadius(6)
+                                }
+                                
                                 ForEach(manager.pieces, id: \.self) { url in
-                                    Text(url.lastPathComponent)
-                                        .font(.system(.body, design: .monospaced))
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "doc.fill")
+                                            .foregroundColor(.accentColor)
+                                            .font(.system(size: 20))
+                                        
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(url.lastPathComponent)
+                                                .font(.system(.body, design: .monospaced))
+                                                .lineLimit(1)
+                                            
+                                            Text(formatFileSize(url))
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        Button(action: {
+                                            NSWorkspace.shared.selectFile(url.path, 
+                                                                inFileViewerRootedAtPath: url.deletingLastPathComponent().path)
+                                        }) {
+                                            Image(systemName: "folder")
+                                                .foregroundColor(.secondary)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .help("Show in Finder")
+                                    }
+                                    .padding(12)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(Color(NSColor.windowBackgroundColor).opacity(0.5))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                                    )
                                 }
                             }
+                            .padding(.horizontal)
                         }
                     } else {
                         DropZoneView(isDragging: $isDragging) {
@@ -124,63 +197,56 @@ struct ContentView: View {
     }
     
     private func loadDroppedFiles(_ providers: [NSItemProvider]) {
-        for provider in providers {
+        if mode == .breakFile {
+            guard let provider = providers.first else { return }
             provider.loadItem(forTypeIdentifier: UTType.item.identifier, options: nil) { item, error in
-                guard error == nil else { return }
-                
                 if let url = item as? URL {
                     DispatchQueue.main.async {
-                        if self.mode == .breakFile {
-                            self.manager.handleFileSelection(url)
-                        } else {
-                            // For mend mode, collect URLs and process when we have 3
-                            if providers.count == 3 {
-                                let urls = providers.compactMap { provider -> URL? in
-                                    var result: URL?
-                                    let semaphore = DispatchSemaphore(value: 0)
-                                    
-                                    provider.loadItem(forTypeIdentifier: UTType.item.identifier, options: nil) { item, _ in
-                                        result = item as? URL
-                                        semaphore.signal()
-                                    }
-                                    
-                                    semaphore.wait()
-                                    return result
-                                }
-                                
-                                if urls.count == 3 {
-                                    self.manager.mendFiles(urls)
-                                }
-                            } else {
-                                self.manager.uploadState = .error("Please drop exactly 3 pieces")
-                            }
-                        }
+                        self.manager.handleFileSelection(url)
                     }
+                }
+            }
+        } else {
+            // Handle mending mode
+            let group = DispatchGroup()
+            var urls: [URL] = []
+            
+            providers.forEach { provider in
+                group.enter()
+                provider.loadItem(forTypeIdentifier: UTType.item.identifier, options: nil) { item, error in
+                    defer { group.leave() }
+                    if let url = item as? URL {
+                        urls.append(url)
+                    }
+                }
+            }
+            
+            group.notify(queue: .main) {
+                if urls.count == 3 {
+                    self.manager.mendFiles(urls)
+                } else {
+                    self.manager.uploadState = .error("Please drop exactly 3 file pieces")
                 }
             }
         }
     }
     
     private func savePieces() {
-        for url in manager.pieces {
-            let savePanel = NSSavePanel()
-            savePanel.allowedContentTypes = [.item]
-            savePanel.canCreateDirectories = true
-            savePanel.isExtensionHidden = false
-            savePanel.title = "Save File Piece"
-            savePanel.message = "Choose a location to save the file piece"
-            savePanel.nameFieldStringValue = url.lastPathComponent
-            
-            let response = savePanel.runModal()
-            
-            if response == .OK, let saveUrl = savePanel.url {
-                do {
-                    try FileManager.default.copyItem(at: url, to: saveUrl)
-                } catch {
-                    manager.uploadState = .error("Failed to save piece: \(error.localizedDescription)")
-                    return
-                }
+        manager.saveAllPieces()
+    }
+    
+    private func formatFileSize(_ url: URL) -> String {
+        do {
+            let resources = try url.resourceValues(forKeys: [.fileSizeKey])
+            if let size = resources.fileSize {
+                let formatter = ByteCountFormatter()
+                formatter.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
+                formatter.countStyle = .file
+                return formatter.string(fromByteCount: Int64(size))
             }
+        } catch {
+            print("Error getting file size: \(error)")
         }
+        return ""
     }
 }
