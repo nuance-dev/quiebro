@@ -1,34 +1,33 @@
-# Quiebro - A Free MacOS (14+) Native Background Remover
+# Quiebro - A Free MacOS (14+) Native File Splitter & Joiner
 
-![image](https://github.com/user-attachments/assets/dc2dc142-ef86-4655-9034-2cb1e52db842)
+A sleek, free native macOS app that splits files into three encrypted pieces and lets you join them back together. Perfect for securely sharing sensitive files across different channels.
 
-
-A sleek, free native macOS app that removes backgrounds from images with a minimal interface and modern design. It's fast!
-
-Note: This app wraps macOS's own native background removing functionality, and it requires macOS version 14+
+Note: This app requires macOS version 14+
 
 ## Features
-- **One-Click Background Removal**: Instantly remove backgrounds from any image
+
+- **Split Files**: Break any file into 3 encrypted pieces
+- **Join Files**: Easily combine the pieces back into the original file
 - **Multiple Input Methods**: Drag & drop, paste (⌘V), or click to upload
-- **Native Performance**: Built with SwiftUI and Vision framework for optimal processing
-- **Dark and Light modes**: Because we care about your eyes
-  
-
-https://github.com/user-attachments/assets/2599e483-8a5e-4147-8a81-c647a6e9f1cb
-
-
+- **Native Performance**: Built with SwiftUI for optimal processing
+- **Dark and Light modes**: Automatically matches your system theme
 
 ## 💻 Get it
 
 Download from the [releases](https://github.com/nuance-dev/Quiebro/releases/) page.
 
-## 🥑 Fun facts?
-- v1 was made with Claude Sonnet 3.5 in under 4 hours
-- Yes, I love cats
+## 🔒 Security
 
-![Screenshot 2024-10-25 at 1 11 45 AM](https://github.com/user-attachments/assets/7d90b952-8049-4036-8761-285df0164985)
+- Each piece is individually encrypted
+- Original file can only be recovered with all 3 pieces
+- Perfect for distributing sensitive files across different channels
+
+## 🥑 Fun facts
+
+- Yes this app can be used to host the best treasure hunt of all time
 
 ## 🤝 Contributing
+
 We welcome contributions! Here's how you can help:
 
 1. Fork the repository
@@ -38,13 +37,17 @@ We welcome contributions! Here's how you can help:
 5. Open a Pull Request
 
 Please ensure your PR:
+
 - Follows the existing code style
 - Includes appropriate tests
 - Updates documentation as needed
 
 ## 📝 License
+
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🔗 Links
+
+- Website: [Nuanc.me](https://nuanc.me)
 - Report issues: [GitHub Issues](https://github.com/nuance-dev/Quiebro/issues)
 - Follow updates: [@Nuanced](https://twitter.com/Nuancedev)
