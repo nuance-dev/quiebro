@@ -1,4 +1,4 @@
-# Quiebro - A Free MacOS (14+) Native File Splitter & Joiner
+# Quiebro - A macOS Native File Splitter & Joiner
 
 A sleek, free native macOS app that splits files into three encrypted pieces and lets you join them back together. Perfect for securely sharing sensitive files across different channels.
 
