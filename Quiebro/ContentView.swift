@@ -55,6 +55,45 @@ struct ContentView: View {
                 )
                 .padding(.horizontal)
                 
+                if mode == .breakFile {
+                    HStack(spacing: 16) {
+                        Button {
+                            manager.isSecureMode.toggle()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: manager.isSecureMode ? "lock.fill" : "lock.open.fill")
+                                    .foregroundStyle(manager.isSecureMode ? Color.accentColor : .secondary)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .contentTransition(.symbolEffect(.replace))
+                                
+                                Text("Secure Mode")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(manager.isSecureMode ? Color.primary : .secondary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(manager.isSecureMode ? 
+                                        Color.accentColor.opacity(0.1) : 
+                                        Color(NSColor.windowBackgroundColor).opacity(0.5))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(manager.isSecureMode ? 
+                                        Color.accentColor.opacity(0.3) : 
+                                        Color.primary.opacity(0.08),
+                                        lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .help("Enables military-grade encryption (AES-GCM) for each piece. Each piece is independently encrypted with a unique key derived from the original file's hash. Recommended when sharing sensitive files across different channels.")
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                }
+                
                 ZStack {
                     if mode == .breakFile {
                         if manager.pieces.isEmpty {

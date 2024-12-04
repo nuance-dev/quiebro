@@ -10,6 +10,7 @@ class FileHandlerManager: ObservableObject {
     @Published var uploadState: UploadState = .idle
     @Published var mendedFile: URL?
     @Published var progress: Double = 0
+    @Published var isSecureMode = false
     
     enum UploadState {
         case idle
@@ -100,6 +101,29 @@ class FileHandlerManager: ObservableObject {
         return Data(bytes: destinationBuffer, count: decompressedSize)
     }
     
+    private func encryptData(_ data: Data, using key: SymmetricKey) throws -> (encryptedData: Data, salt: Data) {
+        let salt = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
+        let derivedKey = deriveKey(from: key.withUnsafeBytes { Data($0) }.base64EncodedString(), salt: salt)
+        let sealedBox = try AES.GCM.seal(data, using: derivedKey, nonce: AES.GCM.Nonce())
+        return (sealedBox.combined!, salt)
+    }
+    
+    private func decryptData(_ data: Data, salt: Data, using key: SymmetricKey) throws -> Data {
+        let derivedKey = deriveKey(from: key.withUnsafeBytes { Data($0) }.base64EncodedString(), salt: salt)
+        let sealedBox = try AES.GCM.SealedBox(combined: data)
+        return try AES.GCM.open(sealedBox, using: derivedKey)
+    }
+    
+    private func deriveKey(from hash: String, salt: Data) -> SymmetricKey {
+        let hashData = hash.data(using: .utf8)!
+        return HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: .init(data: hashData),
+            salt: salt,
+            info: "Quiebro.FileEncryption".data(using: .utf8)!,
+            outputByteCount: 32
+        )
+    }
+    
     func breakFile(_ url: URL) {
         Task { @MainActor in
             self.isLoading = true
@@ -127,21 +151,31 @@ class FileHandlerManager: ObservableObject {
                     let endIndex = min(startIndex + pieceSize, fileSize)
                     let chunk = fileData[startIndex..<endIndex]
                     
-                    let compressedData = try compressData(Data(chunk))
+                    var processedData = try compressData(Data(chunk))
+                    var salt: Data?
                     
-                    let metadata = [
+                    if isSecureMode {
+                        let key = deriveKey(from: originalFileHash, salt: Data()) // Initial salt for key derivation
+                        let (encryptedData, encryptionSalt) = try encryptData(processedData, using: key)
+                        processedData = encryptedData
+                        salt = encryptionSalt
+                    }
+                    
+                    let metadata: [String: Any] = [
                         "uuid": fileId,
                         "index": i,
                         "originalFileName": fileName,
                         "timestamp": Date().ISO8601Format(),
-                        "pieceHash": calculateHash(compressedData),
+                        "pieceHash": calculateHash(processedData),
                         "originalFileHash": originalFileHash,
                         "originalSize": fileSize,
-                        "isCompressed": true
+                        "isCompressed": true,
+                        "isEncrypted": isSecureMode,
+                        "salt": salt?.base64EncodedString() ?? ""
                     ]
                     
                     let pieceUrl = tempDir.appendingPathComponent("\(fileName)_piece\(i + 1)_\(fileId)")
-                    try writePieceToFile(pieceData: compressedData, metadata: metadata, to: pieceUrl)
+                    try writePieceToFile(pieceData: processedData, metadata: metadata, to: pieceUrl)
                     pieceUrls.append(pieceUrl)
                     
                     self.progress = Double(i + 1) / 3.0
@@ -181,6 +215,7 @@ class FileHandlerManager: ObservableObject {
                 var pieceDataArray: [(index: Int, data: Data)] = []
                 var originalFileName: String?
                 var originalFileHash: String?
+                var isEncrypted = false
                 
                 for url in urls {
                     let fullPieceData = try Data(contentsOf: url)
@@ -190,7 +225,7 @@ class FileHandlerManager: ObservableObject {
                     }
                     
                     let metadataData = fullPieceData[..<separatorRange.lowerBound]
-                    let pieceData = fullPieceData[separatorRange.upperBound...]
+                    var pieceData = fullPieceData[separatorRange.upperBound...]
                     
                     guard let metadata = try JSONSerialization.jsonObject(with: metadataData) as? [String: Any] else {
                         throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid metadata"])
@@ -199,13 +234,23 @@ class FileHandlerManager: ObservableObject {
                     if originalFileHash == nil {
                         originalFileHash = metadata["originalFileHash"] as? String
                         originalFileName = metadata["originalFileName"] as? String
+                        isEncrypted = metadata["isEncrypted"] as? Bool ?? false
+                    }
+                    
+                    if isEncrypted {
+                        guard let saltString = metadata["salt"] as? String,
+                              let salt = Data(base64Encoded: saltString) else {
+                            throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid encryption salt"])
+                        }
+                        let key = deriveKey(from: originalFileHash!, salt: Data()) // Initial salt for key derivation
+                        pieceData = try decryptData(Data(pieceData), salt: salt, using: key)
                     }
                     
                     guard let index = metadata["index"] as? Int else {
                         throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid piece index"])
                     }
                     
-                    pieceDataArray.append((index: index, data: try decompressData(Data(pieceData))))
+                    pieceDataArray.append((index: index, data: try decompressData(pieceData)))
                 }
                 
                 pieceDataArray.sort { $0.index < $1.index }

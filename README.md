@@ -14,9 +14,7 @@ Note: This app requires macOS version 14+
 - **Native Performance**: Built with SwiftUI for optimal processing
 - **Dark and Light modes**: Automatically matches your system theme
 
-
 https://github.com/user-attachments/assets/ea628ef4-4e09-498a-ad5c-2a093028c669
-
 
 ## 💻 Get it
 
@@ -24,9 +22,21 @@ Download from the [releases](https://github.com/nuance-dev/Quiebro/releases/) pa
 
 ## 🔒 Security
 
-- Each piece is individually encrypted
+- Each piece is individually encrypted using AES-GCM encryption
+- Unique salt and key derivation for each piece
 - Original file can only be recovered with all 3 pieces
+- Two modes available:
+  - **Standard Mode**: Basic file splitting with LZFSE compression
+  - **Secure Mode**: Adds military-grade encryption to each piece
 - Perfect for distributing sensitive files across different channels
+
+### How Secure Mode Works
+
+- Each piece is independently encrypted using AES-GCM
+- Keys are derived using HKDF with SHA-256
+- Unique salt generated for each piece
+- Key material is derived from the original file's hash
+- Without all three pieces and the original file hash, decryption is computationally infeasible
 
 ## 🥑 Fun facts
 
