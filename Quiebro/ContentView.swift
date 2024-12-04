@@ -17,46 +17,47 @@ struct ContentView: View {
                 .ignoresSafeArea()
             
             VStack(spacing: 24) {
-                // Modern Tab Switcher
-                HStack(spacing: 0) {
-                    ForEach([Mode.breakFile, Mode.mend], id: \.self) { tabMode in
-                        Button(action: { 
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                mode = tabMode
+                // Modern Tab Switcher with Secure Mode
+                HStack(spacing: 16) {
+                    // Tab switcher
+                    HStack(spacing: 0) {
+                        ForEach([Mode.breakFile, Mode.mend], id: \.self) { tabMode in
+                            Button(action: { 
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    mode = tabMode
+                                }
+                            }) {
+                                Text(tabMode == .breakFile ? "Break" : "Mend")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(mode == tabMode ? 
+                                        Color(NSColor.controlAccentColor) : 
+                                        Color.secondary)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 36)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(mode == tabMode ? 
+                                                Color(NSColor.controlAccentColor).opacity(0.1) : 
+                                                Color.clear)
+                                    )
+                                    .contentShape(Rectangle())
                             }
-                        }) {
-                            Text(tabMode == .breakFile ? "Break" : "Mend")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(mode == tabMode ? 
-                                    Color(NSColor.controlAccentColor) : 
-                                    Color.secondary)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 36)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(mode == tabMode ? 
-                                            Color(NSColor.controlAccentColor).opacity(0.1) : 
-                                            Color.clear)
-                                )
-                                .contentShape(Rectangle())
+                            .buttonStyle(PlainButtonStyle())
+                            .frame(width: 120)
                         }
-                        .buttonStyle(PlainButtonStyle())
-                        .frame(width: 120)
                     }
-                }
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(NSColor.windowBackgroundColor).opacity(0.5))
-                        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                )
-                .padding(.horizontal)
-                
-                if mode == .breakFile {
-                    HStack(spacing: 16) {
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(NSColor.windowBackgroundColor).opacity(0.5))
+                            .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    )
+                    
+                    if mode == .breakFile {
+                        // Secure Mode Toggle
                         Button {
                             manager.isSecureMode.toggle()
                         } label: {
@@ -66,12 +67,12 @@ struct ContentView: View {
                                     .font(.system(size: 13, weight: .medium))
                                     .contentTransition(.symbolEffect(.replace))
                                 
-                                Text("Secure Mode")
+                                Text("Secure")
                                     .font(.system(size: 13, weight: .medium))
                                     .foregroundStyle(manager.isSecureMode ? Color.primary : .secondary)
                             }
+                            .frame(height: 36)
                             .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
                                     .fill(manager.isSecureMode ? 
@@ -81,18 +82,16 @@ struct ContentView: View {
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
                                     .stroke(manager.isSecureMode ? 
-                                        Color.accentColor.opacity(0.3) : 
+                                        Color.accentColor.opacity(0.2) : 
                                         Color.primary.opacity(0.08),
                                         lineWidth: 1)
                             )
                         }
                         .buttonStyle(.plain)
-                        .help("Enables military-grade encryption (AES-GCM) for each piece. Each piece is independently encrypted with a unique key derived from the original file's hash. Recommended when sharing sensitive files across different channels.")
-                        
-                        Spacer()
+                        .help("Enables military-grade encryption (AES-GCM) with unique keys for each piece")
                     }
-                    .padding(.horizontal)
                 }
+                .padding(.horizontal)
                 
                 ZStack {
                     if mode == .breakFile {
