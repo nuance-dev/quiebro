@@ -124,7 +124,7 @@ class FileHandlerManager: ObservableObject {
         )
     }
     
-    func breakFile(_ url: URL) {
+    private func breakFile(_ url: URL) {
         Task { @MainActor in
             self.isLoading = true
             self.uploadState = .processing("Analyzing file...")
@@ -140,7 +140,10 @@ class FileHandlerManager: ObservableObject {
                 
                 let fileId = UUID().uuidString
                 let fileName = url.lastPathComponent
-                let originalFileHash = calculateHash(fileData)
+                
+                // Generate master key from file content
+                let masterKey = generateMasterKey(from: fileData)
+                let keyParts = splitMasterKey(masterKey)
                 
                 var pieceUrls: [URL] = []
                 
@@ -155,10 +158,10 @@ class FileHandlerManager: ObservableObject {
                     var salt: Data?
                     
                     if isSecureMode {
-                        let key = deriveKey(from: originalFileHash, salt: Data()) // Initial salt for key derivation
-                        let (encryptedData, encryptionSalt) = try encryptData(processedData, using: key)
-                        processedData = encryptedData
-                        salt = encryptionSalt
+                        salt = generateSalt()
+                        let pieceKey = deriveKey(from: keyParts[i], salt: salt!)
+                        let sealedBox = try AES.GCM.seal(processedData, using: pieceKey)
+                        processedData = sealedBox.combined!
                     }
                     
                     let metadata: [String: Any] = [
@@ -166,12 +169,9 @@ class FileHandlerManager: ObservableObject {
                         "index": i,
                         "originalFileName": fileName,
                         "timestamp": Date().ISO8601Format(),
-                        "pieceHash": calculateHash(processedData),
-                        "originalFileHash": originalFileHash,
-                        "originalSize": fileSize,
-                        "isCompressed": true,
-                        "isEncrypted": isSecureMode,
-                        "salt": salt?.base64EncodedString() ?? ""
+                        "keyPart": keyParts[i].base64EncodedString(),
+                        "salt": salt?.base64EncodedString() ?? "",
+                        "isEncrypted": isSecureMode
                     ]
                     
                     let pieceUrl = tempDir.appendingPathComponent("\(fileName)_piece\(i + 1)_\(fileId)")
@@ -197,6 +197,114 @@ class FileHandlerManager: ObservableObject {
         }
     }
     
+    private func generateMasterKey(from data: Data) -> Data {
+        let hash = SHA256.hash(data: data)
+        return Data(hash)
+    }
+    
+    private func splitMasterKey(_ masterKey: Data) -> [Data] {
+        var parts: [Data] = []
+        let partSize = masterKey.count / 3
+        
+        for i in 0..<3 {
+            let start = i * partSize
+            let end = i == 2 ? masterKey.count : start + partSize
+            parts.append(masterKey[start..<end])
+        }
+        
+        return parts
+    }
+    
+    func mendFiles(_ urls: [URL]) {
+        Task { @MainActor in
+            self.isLoading = true
+            self.uploadState = .processing("Starting")
+            
+            do {
+                var keyParts: [Data] = []
+                var encryptedPieces: [(index: Int, data: Data)] = []
+                var originalFileName: String?
+                
+                // First pass: collect all pieces and metadata
+                for url in urls {
+                    let (metadata, pieceData) = try extractMetadataAndData(from: url)
+                    
+                    guard let index = metadata["index"] as? Int,
+                          let keyPartString = metadata["keyPart"] as? String,
+                          let keyPart = Data(base64Encoded: keyPartString),
+                          let saltString = metadata["salt"] as? String,
+                          let salt = Data(base64Encoded: saltString),
+                          let isEncrypted = metadata["isEncrypted"] as? Bool,
+                          let fileName = metadata["originalFileName"] as? String else {
+                        throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid metadata"])
+                    }
+                    
+                    originalFileName = fileName
+                    keyParts.append(keyPart)
+                    
+                    if isEncrypted {
+                        let pieceKey = deriveKey(from: keyPart, salt: salt)
+                        let sealedBox = try AES.GCM.SealedBox(combined: pieceData)
+                        let decryptedData = try AES.GCM.open(sealedBox, using: pieceKey)
+                        let decompressedData = try decompressData(decryptedData)
+                        encryptedPieces.append((index: index, data: decompressedData))
+                    } else {
+                        encryptedPieces.append((index: index, data: try decompressData(pieceData)))
+                    }
+                    
+                    self.progress = Double(encryptedPieces.count) / 3.0
+                }
+                
+                // Sort pieces by index
+                encryptedPieces.sort { $0.index < $1.index }
+                
+                // Combine the pieces
+                let combinedData = encryptedPieces.map { $0.data }.reduce(Data(), +)
+                
+                // Create temporary directory if it doesn't exist
+                let tempDir = temporaryDirectory
+                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
+                
+                // Save combined file with original filename
+                let tempURL = tempDir.appendingPathComponent(originalFileName ?? "mended_file")
+                try combinedData.write(to: tempURL, options: .atomic)
+                
+                await MainActor.run {
+                    self.mendedFile = tempURL
+                    self.isLoading = false
+                    self.uploadState = .completed
+                    self.progress = 1.0
+                    
+                    // Show save panel automatically
+                    self.showSavePanel(defaultName: originalFileName ?? "mended_file")
+                }
+            } catch {
+                await MainActor.run {
+                    self.isLoading = false
+                    self.uploadState = .error("Failed to mend files: \(error.localizedDescription)")
+                    self.progress = 0
+                }
+            }
+        }
+    }
+    
+    private func deriveKey(from keyPart: Data, salt: Data) -> SymmetricKey {
+        HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: .init(data: keyPart),
+            salt: salt,
+            info: "Quiebro.FileEncryption".data(using: .utf8)!,
+            outputByteCount: 32
+        )
+    }
+    
+    private func generateSalt() -> Data {
+        var salt = Data(count: 32)
+        _ = salt.withUnsafeMutableBytes { buffer in
+            SecRandomCopyBytes(kSecRandomDefault, 32, buffer.baseAddress!)
+        }
+        return salt
+    }
+    
     private func writePieceToFile(pieceData: Data, metadata: [String: Any], to url: URL) throws {
         let metadataData = try JSONSerialization.data(withJSONObject: metadata)
         var fullPieceData = Data()
@@ -206,89 +314,21 @@ class FileHandlerManager: ObservableObject {
         try fullPieceData.write(to: url, options: .atomic)
     }
     
-    func mendFiles(_ urls: [URL]) {
-        Task { @MainActor in
-            self.isLoading = true
-            self.uploadState = .processing("Starting")
-            
-            do {
-                var pieceDataArray: [(index: Int, data: Data)] = []
-                var originalFileName: String?
-                var originalFileHash: String?
-                var isEncrypted = false
-                
-                for url in urls {
-                    let fullPieceData = try Data(contentsOf: url)
-                    
-                    guard let separatorRange = fullPieceData.range(of: "SEPARATOR".data(using: .utf8)!) else {
-                        throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid piece format"])
-                    }
-                    
-                    let metadataData = fullPieceData[..<separatorRange.lowerBound]
-                    var pieceData = fullPieceData[separatorRange.upperBound...]
-                    
-                    guard let metadata = try JSONSerialization.jsonObject(with: metadataData) as? [String: Any] else {
-                        throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid metadata"])
-                    }
-                    
-                    if originalFileHash == nil {
-                        originalFileHash = metadata["originalFileHash"] as? String
-                        originalFileName = metadata["originalFileName"] as? String
-                        isEncrypted = metadata["isEncrypted"] as? Bool ?? false
-                    }
-                    
-                    if isEncrypted {
-                        guard let saltString = metadata["salt"] as? String,
-                              let salt = Data(base64Encoded: saltString) else {
-                            throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid encryption salt"])
-                        }
-                        let key = deriveKey(from: originalFileHash!, salt: Data()) // Initial salt for key derivation
-                        pieceData = try decryptData(Data(pieceData), salt: salt, using: key)
-                    }
-                    
-                    guard let index = metadata["index"] as? Int else {
-                        throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid piece index"])
-                    }
-                    
-                    pieceDataArray.append((index: index, data: try decompressData(pieceData)))
-                }
-                
-                pieceDataArray.sort { $0.index < $1.index }
-                
-                var finalData = Data()
-                for piece in pieceDataArray {
-                    finalData.append(piece.data)
-                }
-                
-                let finalHash = calculateHash(finalData)
-                guard finalHash == originalFileHash else {
-                    throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "File integrity check failed"])
-                }
-                
-                let tempDir = temporaryDirectory
-                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-                
-                guard let originalFileName = originalFileName else {
-                    throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Original filename not found"])
-                }
-                
-                let mendedFileUrl = tempDir.appendingPathComponent(originalFileName)
-                try finalData.write(to: mendedFileUrl)
-                
-                await MainActor.run {
-                    self.mendedFile = mendedFileUrl
-                    self.isLoading = false
-                    self.uploadState = .completed
-                    
-                    showSavePanel(defaultName: originalFileName)
-                }
-            } catch {
-                await MainActor.run {
-                    self.isLoading = false
-                    self.uploadState = .error("Failed to mend file: \(error.localizedDescription)")
-                }
-            }
+    private func extractMetadataAndData(from url: URL) throws -> ([String: Any], Data) {
+        let fullPieceData = try Data(contentsOf: url)
+        
+        guard let separatorRange = fullPieceData.range(of: "SEPARATOR".data(using: .utf8)!) else {
+            throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid piece format"])
         }
+        
+        let metadataData = fullPieceData[..<separatorRange.lowerBound]
+        let pieceData = fullPieceData[separatorRange.upperBound...]
+        
+        guard let metadata = try JSONSerialization.jsonObject(with: metadataData) as? [String: Any] else {
+            throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid metadata format"])
+        }
+        
+        return (metadata, Data(pieceData))
     }
     
     private func showSavePanel(defaultName: String) {
