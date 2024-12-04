@@ -27,7 +27,7 @@ Download from the [releases](https://github.com/nuance-dev/Quiebro/releases/) pa
 - Original file can only be recovered with all 3 pieces
 - Two modes available:
   - **Standard Mode**: Basic file splitting with LZFSE compression
-  - **Secure Mode**: Adds military-grade encryption to each piece
+  - **Secure Mode**: Adds military-grade encryption to the file with the key split among the pieces
 - Perfect for distributing sensitive files across different channels
 
 ### How Secure Mode Works
